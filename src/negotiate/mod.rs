@@ -161,28 +161,35 @@ fn matches(
             || lid1.variants == lid2.variants)
 }
 
-pub fn filter_matches<'a, R: 'a + AsRef<LanguageIdentifier>, A: 'a + AsRef<LanguageIdentifier>>(
+pub fn filter_matches<'a, R: 'a + AsRef<LanguageIdentifier>, A: 'a + AsRef<LanguageIdentifier> + std::fmt::Debug>(
     requested: &[R],
     available: &'a [A],
     strategy: NegotiationStrategy,
 ) -> Vec<&'a A> {
     let mut lc: Option<LocaleExpander> = None;
 
-    let mut supported_locales = vec![];
+    let mut supported_locales: Vec<(&A, i32)> = vec![];
+    let mut additional_supported_locales: Vec<(&A, i32)> = vec![];
 
-    let mut available_locales: Vec<&A> = available.iter().collect();
+    let mut available_locales: Vec<(&A, i32)> = available.iter().enumerate().map(|(m, locale)| {
+        let sort = match requested.iter().position(|req| matches(locale.as_ref(), &req.as_ref(), false, false)) {
+            Some(n) => - ((n + available.len()) as i32) - 1, // always negative
+            None => m as i32 // always positive
+        };
+        (locale, sort)
+    }).collect();
 
     macro_rules! test_strategy {
         ($req:ident, $self_as_range:expr, $other_as_range:expr) => {{
             let mut match_found = false;
-            available_locales.retain(|locale| {
+            available_locales.retain(|(locale, exact)| {
                 if strategy != NegotiationStrategy::Filtering && match_found {
                     return true;
                 }
 
                 if matches(locale.as_ref(), &$req, $self_as_range, $other_as_range) {
                     match_found = true;
-                    supported_locales.push(*locale);
+                    additional_supported_locales.push((*locale, *exact));
                     return false;
                 }
                 true
@@ -198,8 +205,23 @@ pub fn filter_matches<'a, R: 'a + AsRef<LanguageIdentifier>, A: 'a + AsRef<Langu
         }};
     }
 
+    macro_rules! extend_locales {
+        () => {{
+            additional_supported_locales.iter_mut().enumerate().for_each(|(n, entry)| {
+                if (entry.1 >= 0) {
+                    entry.1 = n as i32;
+                }
+            });
+            additional_supported_locales.sort_by(|a: &(&A, i32), b: &(&A, i32)| a.1.cmp(&b.1));
+            supported_locales.extend(additional_supported_locales.clone());
+        }}
+    }
+
     for req in requested {
         let req = req.as_ref();
+
+        extend_locales!();
+        additional_supported_locales = vec![];
 
         // 1) Try to find a simple (case-insensitive) string match for the request.
         test_strategy!(req, false, false);
@@ -233,15 +255,17 @@ pub fn filter_matches<'a, R: 'a + AsRef<LanguageIdentifier>, A: 'a + AsRef<Langu
         // 6) Try to match against a region as a range
         req.region = None;
         test_strategy!(req, true, true);
-    }
 
-    supported_locales
+    }
+    extend_locales!();
+
+    supported_locales.into_iter().map(|(a, _)| a).collect()
 }
 
 pub fn negotiate_languages<
     'a,
     R: 'a + AsRef<LanguageIdentifier>,
-    A: 'a + AsRef<LanguageIdentifier> + PartialEq,
+    A: 'a + AsRef<LanguageIdentifier> + PartialEq + std::fmt::Debug,
 >(
     requested: &[R],
     available: &'a [A],
