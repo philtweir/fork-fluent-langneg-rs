@@ -161,7 +161,7 @@ fn matches(
             || lid1.variants == lid2.variants)
 }
 
-pub fn filter_matches<'a, R: 'a + AsRef<LanguageIdentifier>, A: 'a + AsRef<LanguageIdentifier> + std::fmt::Debug>(
+pub fn filter_matches<'a, R: 'a + AsRef<LanguageIdentifier>, A: 'a + AsRef<LanguageIdentifier>>(
     requested: &[R],
     available: &'a [A],
     strategy: NegotiationStrategy,
@@ -265,7 +265,7 @@ pub fn filter_matches<'a, R: 'a + AsRef<LanguageIdentifier>, A: 'a + AsRef<Langu
 pub fn negotiate_languages<
     'a,
     R: 'a + AsRef<LanguageIdentifier>,
-    A: 'a + AsRef<LanguageIdentifier> + PartialEq + std::fmt::Debug,
+    A: 'a + AsRef<LanguageIdentifier> + PartialEq,
 >(
     requested: &[R],
     available: &'a [A],
